@@ -4,7 +4,7 @@ description: Ayuda a definir y ejecutar planes de trabajo interactivos de hasta 
 license: Apache-2.0
 metadata:
   author: david-sliren
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # Plan empírico
@@ -49,7 +49,18 @@ Si el proyecto tiene archivos de reglas (AGENTS.md, CLAUDE.md, constitution.md u
    ===fin de instruccion 1===
    ```
 
-   El estado entre corchetes refleja la situación de la instrucción: `pendiente`, `en curso`, `completada`, `fallida` u `omitida`. **Esperamos** y **Verificación** pueden omitirse en instrucciones donde el resultado es evidente. No muestres instrucciones vacías salvo que ayude a pedir el contenido que falta. Mantén la numeración consecutiva.
+   El estado entre corchetes refleja la situación de la instrucción según estas transiciones:
+
+   | Desde       | Hacia        | Cuándo                                                                                            | Acción del agente                                                                                                                                                         |
+   | ----------- | ------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `pendiente` | `en curso`   | Se empieza a ejecutar la instrucción.                                                             | Anunciar que se inicia.                                                                                                                                                   |
+   | `en curso`  | `completada` | El resultado coincide con lo esperado y no queda trabajo necesario.                               | Reflexión post-instrucción y avanzar.                                                                                                                                     |
+   | `en curso`  | `fallida`    | Se intentó completar pero el resultado no es el esperado y no se puede corregir en el mismo paso. | Explicar qué se intentó, qué falló y qué falta. Ofrecer: reintentar la misma instrucción, reemplazarla por una corregida o saltarla. No avanzar sin que el usuario elija. |
+   | `en curso`  | `omitida`    | El usuario decide no completarla (o la evidencia la hace innecesaria).                            | Registrar el motivo y avanzar.                                                                                                                                            |
+   | `fallida`   | `en curso`   | El usuario elige reintentar.                                                                      | Retomar desde el punto pendiente, no desde cero.                                                                                                                          |
+   | `fallida`   | `omitida`    | El usuario elige saltar.                                                                          | Registrar el motivo.                                                                                                                                                      |
+
+   **Esperamos** y **Verificación** pueden omitirse en instrucciones donde el resultado es evidente. No muestres instrucciones vacías salvo que ayude a pedir el contenido que falta. Mantén la numeración consecutiva.
 
 ## Cómo preguntar
 
@@ -76,11 +87,46 @@ Aclara si el usuario quiere solo definir el plan o también ejecutarlo. Si ya pi
 - **Decisiones acordadas**: las respuestas a las preguntas hechas, para que otro agente no repita preguntas ni revierta lo decidido.
 - Las instrucciones en el formato consolidado, con su estado.
 
+Ejemplo de archivo guardado:
+
+```markdown
+---
+format_version: 1
+---
+
+# Nombre corto del plan
+
+**Petición original:** lo que el usuario pidió, en sus palabras.
+
+## Reconocimiento
+
+Resumen breve de lo que existe, las convenciones relevantes y las discrepancias encontradas.
+
+## Decisiones acordadas
+
+- Pregunta 1 → Respuesta elegida.
+- Pregunta 2 → Respuesta elegida.
+
+## Instrucciones
+
+===instruccion 1=== [completada]
+Petición: lo que se hizo
+Esperamos: resultado observable esperado
+Verificación: cómo se comprobó
+===fin de instruccion 1===
+
+===instruccion 2=== [pendiente]
+Petición: lo que se va a hacer
+Esperamos: resultado observable esperado
+Verificación: cómo se comprobará
+===fin de instruccion 2===
+```
+
 Si el proyecto usa git, sugiere añadir `.empirical-plan/` al `.gitignore`, salvo que el usuario quiera versionar planes. No muevas ni borres planes terminados: el estado `completada` en cada instrucción indica que el plan está cerrado.
 
 Al ejecutar:
 
-- Trabaja una instrucción a la vez y carga las skills del proyecto que correspondan antes de la acción (por ejemplo, la skill de commits antes de preparar un commit).
+- Trabaja una instrucción a la vez. Si el paso requiere un flujo documentado en otra skill del proyecto (por ejemplo, una skill de commits antes de preparar un commit), menciona cuál es y sugiere al usuario activarla antes de continuar; no asumas que se cargará automáticamente.
 - Si una acción requiere una autorización adicional según las instrucciones del proyecto o del entorno, pausa y solicita esa autorización.
 - Cuando una instrucción implique cambios en muchos archivos, modificaciones de lógica de negocio o alteraciones de esquemas de datos, señálalo como «cambio amplio» y sugiere verificación incremental (por ejemplo, ejecutar lint o revisar un archivo antes de continuar con los demás).
 - **Reflexión post-instrucción**: al completar cada instrucción, antes de pasar a la siguiente, evalúa brevemente: ¿el resultado coincide con lo que esperábamos? ¿Descubrimos algo que afecte las instrucciones restantes? Si la evidencia sugiere ajustar el plan, proponlo al usuario antes de continuar. No ejecutes la siguiente instrucción con un plan que la evidencia ya contradice. Actualiza el estado de la instrucción completada en el plan visible y, si el plan está guardado, en su archivo, para que otro agente pueda retomarlo.
